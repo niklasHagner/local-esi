@@ -24,6 +24,8 @@ function localEsi(html, req, res, next) {
 function ListenerContext(req, res) {
   return {
     esiChooseTags: [],
+    activeChooseNumber: 0,
+    numberOfChooses: 0,
     assigns: {
       "HTTP_COOKIE": req.cookies || {},
       "HTTP_USER_AGENT": {},
@@ -58,14 +60,20 @@ function ESIListener(context) {
 
   esiTags["esi:choose"] = {
     open(attribs, next) {
+      context.numberOfChooses++;
+
       if (!shouldWrite()) {
         context.ignoreUntilNextEndChoose = true;
+        context.activeChooseNumber = context.numberOfChooses - 1;
         return next();
       }
+
       context.esiChooseTags.push({tagname: "esi:choose", attribs, isChoosing: true });
       return next();
     },
     close(next) {
+      context.numberOfChooses--;
+
       if (context.ignoreUntilNextEndChoose) {
         context.ignoreUntilNextEndChoose = false;
       } else {
@@ -170,6 +178,10 @@ function ESIListener(context) {
 
   esiTags["esi:otherwise"] = {
     open(attribs, next) {
+      if (context.ignoreUntilNextEndChoose && context.activeChooseNumber !== context.numberOfChooses) {
+        return next();
+      }
+
       getLastChooseTag().shouldWrite = !getLastChooseTag().foundMatchingTestAttribute;
       context.inEsiStatementProcessingContext = true;
       return next();
@@ -240,6 +252,7 @@ function ESIListener(context) {
     }
 
     const lastChooseTag = getLastChooseTag();
+
     if (lastChooseTag) {
       return lastChooseTag.shouldWrite;
     }
